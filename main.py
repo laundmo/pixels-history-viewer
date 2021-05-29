@@ -8,17 +8,18 @@ import pickle
 try:
     from reloading import reloading
 except ImportError:
-    def reloading(f):
-        return f
+    
+    # mock reloading without functionality, because almost everyone wont have it installd
+    def reloading(*args, **kwargs):
+        if len(args) > 0 or kwargs.get("forever"):
+            fn_or_seq = kwargs.get("forever") or args[0]
+            if isinstance(fn_or_seq, types.FunctionType):
+                return fn_or_seq
+            return fn_or_seq
+        return update_wrapper(partial(reloading, **kwargs), reloading)
+
 
 pixels_api_token = "YOUR API TOKEN HERE"
-      
-sess = requests.Session()
-sess.headers = {"Authorization": "Bearer " + pixels_api_token}
-
-r = sess.get("https://pixels.pythondiscord.com/get_size")
-dims = r.json()
-print(dims)
 
 @dataclass
 class Dimensions:
@@ -34,10 +35,14 @@ class PixelsClient:
         self.reset = 10
         self.remaining = 5
         self.limit = 5
+        self._dims = None
 
     def get_size(self):
+        if self._dims:
+            return self._dims
         r = self.session.get(self.base_url + "get_size")
-        return Dimensions(**r.json())
+        self._dims = Dimensions(**r.json())
+        return self._dims
 
     def get_pixels(self):
         r = self.session.get(self.base_url + "get_pixels")
@@ -48,7 +53,7 @@ class PixelsClient:
         return r.content
 
     def get_image(self):
-        img = Image.frombytes("RGB", (dims["width"], dims["height"]), self.get_pixels())
+        img = Image.frombytes("RGB", (self.get_size().width, self.get_size().height), self.get_pixels())
         return np.array(img)
 
 
@@ -73,7 +78,7 @@ class DisplayHandler:
         )
         cv2.setMouseCallback(self.windowname, self.handle_mouse_event)
         self.load_images()
-        cv2.imshow(self.windowname, cv2.cvtColor(np.zeros((self.window_size[1], self.window_size[0], 3), np.uint8), cv2.COLOR_BGR2RGB))
+        cv2.imshow(self.windowname, cv2.cvtColor(np.zeros((self.client.get_size().width, self.client.get_size().height, 3), np.uint8), cv2.COLOR_BGR2RGB))
         return self
 
     def load_images(self):
