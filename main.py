@@ -26,7 +26,6 @@ class Dimensions:
     width: int
     height: int
 
-
 class PixelsClient:
     def __init__(self):
         self.base_url = "https://pixels.pythondiscord.com/"
@@ -37,8 +36,8 @@ class PixelsClient:
         self.limit = 5
         self._dims = None
 
-    def get_size(self):
-        if self._dims:
+    def get_size(self, bypass=False):
+        if not bypass and self._dims:
             return self._dims
         r = self.session.get(self.base_url + "get_size")
         self._dims = Dimensions(**r.json())
@@ -47,13 +46,14 @@ class PixelsClient:
     def get_pixels(self):
         r = self.session.get(self.base_url + "get_pixels")
         h = r.headers
-        self.remaining = int(h.get("requests-remaining", 0))
-        self.limit = int(h.get("Requests-Limit", 5))
-        self.reset = int(h.get("requests-reset", 10))
+        self.remaining = float(h.get("requests-remaining", 0))
+        self.limit = float(h.get("Requests-Limit", 5))
+        self.reset = float(h.get("requests-reset", 10))
         return r.content
 
     def get_image(self):
-        img = Image.frombytes("RGB", (self.get_size().width, self.get_size().height), self.get_pixels())
+        size = self.get_size(bypass=True)
+        img = Image.frombytes("RGB", (size.width, size.height), self.get_pixels())
         return np.array(img)
 
 
@@ -108,16 +108,16 @@ class DisplayHandler:
             img = self.client.get_image()
             self.images.append(img)
             self.images = self.images[-self.back:]
-        except ValueError:
-            pass
+        except ValueError as e:
+            print(e)
         cv2.setTrackbarMax("frame-back", self.windowname, len(self.images) - 1)
         if self.do_jump_back:
             self.handle_trackbar_change(0)
         if self.client.remaining < 1:
-            for _ in range(1000 * self.client.reset):
+            for _ in range(1000 * round(self.client.reset + 1)):
                 cv2.waitKey(1)
         else:
-            for _ in range(1000 * (self.client.reset // self.client.limit)):
+            for _ in range(1000 * round((self.client.reset / self.client.limit) + 1)):
                 cv2.waitKey(1)
         self.dump_images()
     
